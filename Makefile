@@ -5,7 +5,7 @@ MPICC=mpicc
 all: chaleur
 
 chaleur.o: chaleur.c
-	$(MPICC) $(CFLAGS) -c par.c -o $@
+	$(MPICC) $(CFLAGS) -c chaleur.c -o $@
 
 chaleur: chaleur.o
 	$(MPICC) $(LFLAGS) chaleur.o -o chaleur
