@@ -3,32 +3,37 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <stddef.h>
+#include <string.h>
 #include <mpi.h>
 
+#define SLEEP_TIME 5
+
 void chaleur_seq(int m, int n, int np, int td, int h);
-void chaleur_par(int processors, int rank, int m, int n, int np, int td, int h);
-void initialize_matrix(int m, int n, double matrix[m][n], int value);
+void chaleur_par(int m, int n, int np, double td, double h);
+void initialize_matrix(int m, int n, double matrix[m][n]);
 void print_matrix(int m, int n, double matrix[m][n]);
 double get_current_time();
 
 int main(int argc, char **argv) {
-  int err, processors, rank, m, n, np, td, h;
-  double start, end;
+  int err, rank, m, n, np;
+  double start, end, td, h;
   err = MPI_Init(&argc, &argv);
 
-  MPI_Comm_size(MPI_COMM_WORLD, &processors);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   m  = atoi(argv[1]);
   n  = atoi(argv[2]);
   np = atoi(argv[3]);
-  td = atoi(argv[4]);
-  h  = atoi(argv[5]);
+  td = atof(argv[4]);
+  h  = atof(argv[5]);
+
 
   if (rank == 0) {
+    printf("m=%d, n=%d, np=%d, td=%.2f, h=%.2f\n", m, n, np, td, h);
+
     printf("Version parallèle\n");
     start = get_current_time();
-    chaleur_par(processors, rank, m, n, np, td, h);
+    chaleur_par(m, n, np, td, h);
     end = get_current_time();
     double dt_par = end - start;
     printf("Temps d'éxecution : %f\n", dt_par);
@@ -40,7 +45,7 @@ int main(int argc, char **argv) {
     double dt_seq = end - start;
     printf("Temps d'éxecution : %f\n", dt_seq);
   } else {
-    chaleur_par(processors, rank, m, n, np, td, h);
+    chaleur_par(m, n, np, td, h);
   }
 
   err = MPI_Finalize();
@@ -50,39 +55,47 @@ int main(int argc, char **argv) {
 void chaleur_seq(int m, int n, int np, int td, int h) {
   double matrix[m][n];
   int i, j, k;
-  initialize_matrix(m, n, matrix, 0.0);
 
   printf(" => init\n");
-  for(i = 0; i < m; i++) {
-    for(j = 0; j < n; j++) {
-      matrix[i][j] = (i * (m - i - 1)) * (j * (n - j - 1));
-    }
-  }
+
+  initialize_matrix(m, n, matrix);
   print_matrix(m, n, matrix);
 
   printf(" => eval\n");
-  for(k = 1; k < np; k++) {
-    for(i = 1; i < m; i++) {
-      for(j = 1; j < n; j++) {
-        // i can't count for shit.
-        matrix[i][j] = ((1 - (4 * td / h * h)) * matrix[i][j]) +
-          ((td / h * h) * (matrix[i - 1][j] + matrix[i + 1][j] + matrix[i][j - 1] + matrix[i][j + 1]));
+
+  for(k = 0; k < np; k++) {
+    double m2[m][n];
+    memset(m2, 0, sizeof(m2));
+    for(i = 0; i < m; i++) {
+      for(j = 0; j < n; j++) {
+        usleep(SLEEP_TIME);
+        m2[i][j] = (1 -4.0* td / (h*h)) * matrix[i][j] + ((double)td / (h*h)) * (matrix[i - 1][j] + matrix[i + 1][j] + matrix[i][j - 1] + matrix[i][j + 1]);
       }
     }
+    memcpy(matrix, m2, sizeof(matrix));
   }
   print_matrix(m, n, matrix);
 }
 
-void chaleur_par(int processors, int rank, int m, int n, int np, int td, int h) {
+void chaleur_par(int m, int n, int np, double td, double h) {
+  int processors, rank;
 
+  MPI_Comm_size(MPI_COMM_WORLD, &processors);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  if(rank == 0) {
+
+  } else {
+
+  }
 }
 
-void initialize_matrix(int m, int n, double matrix[m][n], int value) {
+void initialize_matrix(int m, int n, double matrix[m][n]) {
   int i, j;
 
   for(i = 0; i < m; i++)
-    for (j = 0; j < n; j++)
-      matrix[i][j] = value;
+    for(j = 0; j < n; j++)
+      matrix[i][j] = (i * (m - i - 1)) * (j * (n - j - 1));
 }
 
 void print_matrix(int m, int n, double matrix[m][n]) {
