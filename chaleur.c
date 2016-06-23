@@ -63,11 +63,12 @@ void chaleur_seq(int m, int n, int np, int td, int h) {
 
   printf(" => eval\n");
 
-  for(k = 0; k < np; k++) {
+  for(k = 1; k < np; k++) {
     double m2[m][n];
     memset(m2, 0, sizeof(m2));
-    for(i = 0; i < m; i++) {
-      for(j = 0; j < n; j++) {
+
+    for(i = 1; i < m - 1; i++) {
+      for(j = 1; j < n - 1; j++) {
         usleep(SLEEP_TIME);
         m2[i][j] = (1 -4.0* td / (h*h)) * matrix[i][j] + ((double)td / (h*h)) * (matrix[i - 1][j] + matrix[i + 1][j] + matrix[i][j - 1] + matrix[i][j + 1]);
       }
@@ -79,7 +80,7 @@ void chaleur_seq(int m, int n, int np, int td, int h) {
 
 void chaleur_par(int m, int n, int np, double td, double h) {
   int processors, rank;
-
+  int i;
   MPI_Comm_size(MPI_COMM_WORLD, &processors);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
