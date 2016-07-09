@@ -13,7 +13,7 @@
 #define DONE_TAG      5
 #define START_TAG     6
 
-#define DEBUG 1
+// #define DEBUG 0
 
 #ifdef DEBUG
 #  define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while(0)
@@ -171,7 +171,7 @@ void chaleur_par(int m, int n, int np, double td, double h) {
       // update
       for(int a = start; a <= end; a++) {
         for(int b = 1; b < n - 2; b++) {
-          m2[0][0] = 1;
+          m2[a][b] = 1;
         }
       }
 
