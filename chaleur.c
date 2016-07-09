@@ -13,6 +13,14 @@
 #define DONE_TAG      5
 #define START_TAG     6
 
+#define DEBUG 1
+
+#ifdef DEBUG
+#  define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while(0)
+#else
+#  define DEBUG_PRINT(...) do{ } while (0)
+#endif
+
 void chaleur_seq(int m, int n, int np, int td, int h);
 void chaleur_par(int m, int n, int np, double td, double h);
 void initialize_matrix(int m, int n, double matrix[m][n]);
@@ -105,7 +113,7 @@ void chaleur_par(int m, int n, int np, double td, double h) {
     extra       = m % workers;
     offset      = 0;
 
-    // printf("workers=%d average_row=%d extra=%d\n", workers, average_row, extra);
+    DEBUG_PRINT("workers=%d average_row=%d extra=%d\n", workers, average_row, extra);
     for(i = 1; i <= workers; i++) {
       struct Info info;
       info.offset = offset;
@@ -118,10 +126,10 @@ void chaleur_par(int m, int n, int np, double td, double h) {
 
       MPI_Send(&info, 1, mpi_info_type, destination, START_TAG, MPI_COMM_WORLD);
       MPI_Send(&matrix[info.offset][0], info.row * n, MPI_DOUBLE, destination, START_TAG, MPI_COMM_WORLD);
-      // printf(
-      //   "send => dest=%d, offset=%d, row=%d, left=%d, right=%d\n",
-      //   destination, info.offset, info.row, info.left, info.right
-      // );
+      DEBUG_PRINT(
+        "send => dest=%d, offset=%d, row=%d, left=%d, right=%d\n",
+        destination, info.offset, info.row, info.left, info.right
+      );
 
       offset += info.row;
     }
@@ -139,11 +147,11 @@ void chaleur_par(int m, int n, int np, double td, double h) {
     MPI_Recv(&matrix[info.offset][0], info.row * n, MPI_DOUBLE, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
 
     start = info.offset;
-    end = info.offset + info.row - 1;
+    end   = info.offset + info.row - 1;
     if(info.offset == 0) start = 1;
     if(info.offset + info.row == m) end -= 1;
 
-    // printf("recv => worker=%d, start=%d, end=%d\n", rank, start, end);
+    DEBUG_PRINT("recv => worker=%d, start=%d, end=%d\n", rank, start, end);
     for(i = 0; i < np; i++) {
       double m2[m][n];
       memset(m2, 0, sizeof(m2));
@@ -169,7 +177,7 @@ void chaleur_par(int m, int n, int np, double td, double h) {
 
       memcpy(matrix, m2, sizeof(matrix));
     }
-
+    DEBUG_PRINT("DONE\n");
     MPI_Send(&info, 1, mpi_info_type, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
     MPI_Send(&matrix[info.offset][0], info.row*n, MPI_FLOAT, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
   }
