@@ -72,12 +72,7 @@ void chaleur_seq(int m, int n, int np, int td, int h) {
   double matrix[m][n];
   int i, j, k;
 
-  printf(" => init\n");
-
   initialize_matrix(m, n, matrix);
-  print_matrix(m, n, matrix);
-
-  printf(" => eval\n");
 
   for(k = 1; k < np; k++) {
     double m2[m][n];
@@ -91,6 +86,7 @@ void chaleur_seq(int m, int n, int np, int td, int h) {
     }
     memcpy(matrix, m2, sizeof(matrix));
   }
+
   print_matrix(m, n, matrix);
 }
 
@@ -101,14 +97,15 @@ void chaleur_par(int m, int n, int np, double td, double h) {
   MPI_Comm_size(MPI_COMM_WORLD, &processors);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  initialize_matrix(m, n, matrix);
-  if(rank == 0) {
+  if(rank == MASTER_WORKER) {
+    initialize_matrix(m, n, matrix);
     int workers, average_row, extra, destination;
     workers     = processors - 1;
     average_row = m / workers;
     extra       = m % workers;
     offset      = 0;
 
+    // printf("workers=%d average_row=%d extra=%d\n", workers, average_row, extra);
     for(i = 1; i <= workers; i++) {
       struct Info info;
       info.offset = offset;
@@ -121,10 +118,10 @@ void chaleur_par(int m, int n, int np, double td, double h) {
 
       MPI_Send(&info, 1, mpi_info_type, destination, START_TAG, MPI_COMM_WORLD);
       MPI_Send(&matrix[info.offset][0], info.row * n, MPI_DOUBLE, destination, START_TAG, MPI_COMM_WORLD);
-      printf(
-        "send => dest=%d, offset=%d, row=%d, left=%d, right=%d",
-        destination, info.offset, info.row, info.left, info.right
-      );
+      // printf(
+      //   "send => dest=%d, offset=%d, row=%d, left=%d, right=%d\n",
+      //   destination, info.offset, info.row, info.left, info.right
+      // );
 
       offset += info.row;
     }
@@ -146,21 +143,35 @@ void chaleur_par(int m, int n, int np, double td, double h) {
     if(info.offset == 0) start = 1;
     if(info.offset + info.row == m) end -= 1;
 
+    // printf("recv => worker=%d, start=%d, end=%d\n", rank, start, end);
     for(i = 0; i < np; i++) {
+      double m2[m][n];
+      memset(m2, 0, sizeof(m2));
+
+      // left neighbor
       if(info.left != -1) {
-        MPI_Send(&matrix[info.offset][0], n, MPI_FLOAT, info.left, RIGHT_TAG, MPI_COMM_WORLD);
-        MPI_Recv(&matrix[info.offset-1][0], n, MPI_FLOAT, info.left, LEFT_TAG, MPI_COMM_WORLD, &status);
+        MPI_Send(&m2[info.offset][0], n, MPI_FLOAT, info.left, RIGHT_TAG, MPI_COMM_WORLD);
+        MPI_Recv(&m2[info.offset-1][0], n, MPI_FLOAT, info.left, LEFT_TAG, MPI_COMM_WORLD, &status);
       }
+
+      // right neighbor
       if(info.right != -1) {
-        MPI_Send(&matrix[info.offset+info.row-1][0], n, MPI_FLOAT, info.right, LEFT_TAG, MPI_COMM_WORLD);
-        MPI_Recv(&matrix[info.offset+info.row][0], n, MPI_FLOAT, info.right, RIGHT_TAG, MPI_COMM_WORLD, &status);
+        MPI_Send(&m2[info.offset+info.row-1][0], n, MPI_FLOAT, info.right, LEFT_TAG, MPI_COMM_WORLD);
+        MPI_Recv(&m2[info.offset+info.row][0], n, MPI_FLOAT, info.right, RIGHT_TAG, MPI_COMM_WORLD, &status);
       }
+
+      // update
+      for(int a = start; a <= end; a++) {
+        for(int b = 1; b < n - 2; b++) {
+          m2[0][0] = 1;
+        }
+      }
+
+      memcpy(matrix, m2, sizeof(matrix));
     }
 
     MPI_Send(&info, 1, mpi_info_type, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
     MPI_Send(&matrix[info.offset][0], info.row*n, MPI_FLOAT, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
-
-    printf("recv => worker=%d, start=%d, end=%d\n", rank, start, end);
   }
 }
 
