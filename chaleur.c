@@ -24,7 +24,7 @@
 void chaleur_seq(int m, int n, int np, double td, double h);
 void chaleur_par(int m, int n, int np, double td, double h);
 
-void matrix_init(int m, int n, double matrix[m][n]);
+void matrix_init(int m, int n, double matrix[2][m][n]);
 void matrix_print(int m, int n, double matrix[m][n]);
 
 void types_init();
@@ -79,43 +79,55 @@ int main(int argc, char **argv) {
 }
 
 void chaleur_seq(int m, int n, int np, double td, double h) {
-  double matrix[m][n];
+  double matrix[2][m][n];
+  double tdh2 = td / (h * h);
   int i, j, k;
+  int current = 0;
 
   matrix_init(m, n, matrix);
+
   printf("init\n====\n");
-  matrix_print(m, n, matrix);
+  matrix_print(m, n, matrix[current]);
 
   for(k = 1; k < np; k++) {
-    double m2[m][n];
-    memset(m2, 0, sizeof(m2));
+    current = k % 2;
 
     for(i = 1; i < m - 1; i++) {
       for(j = 1; j < n - 1; j++) {
         usleep(SLEEP_TIME);
-        // printf("a=%.2f\n", (1.0 - 4.0 * td / (h * h)) * matrix[i][j]);
-        // printf("b=%.2f\n", (td / (h * h)) * (matrix[i - 1][j] + matrix[i + 1][j] + matrix[i][j - 1] + matrix[i][j + 1]));
-        m2[i][j] = (1.0 - 4.0 * td / (h * h)) * matrix[i][j] +
-          (td / (h * h)) * (matrix[i - 1][j] + matrix[i + 1][j] + matrix[i][j - 1] + matrix[i][j + 1]);
-        printf("m=%d n=%d td=%.2f h=%.2f m2[%d][%d]=%.2f\n", m, n, td, h, i, j, m2[i][j]);
+
+        DEBUG_PRINT("matrix[current=%d][i=%d][j=%d]=%.2f\n", current, i, j, matrix[current][i][j]);
+        DEBUG_PRINT("up   =%.2f\n", matrix[1-current][i - 1][j]);
+        DEBUG_PRINT("down =%.2f\n", matrix[1-current][i + 1][j]);
+        DEBUG_PRINT("left =%.2f\n", matrix[1-current][i][j - 1]);
+        DEBUG_PRINT("right=%.2f\n", matrix[1-current][i][j + 1]);
+
+        matrix[current][i][j] = (1.0 - (4.0 * tdh2)) * matrix[1-current][i][j] +
+          tdh2 * (matrix[1-current][i - 1][j] +
+                  matrix[1-current][i + 1][j] +
+                  matrix[1-current][i][j - 1] +
+                  matrix[1-current][i][j + 1]);
       }
     }
-    matrix_print(m,n,m2);
-    memcpy(matrix, m2, sizeof(matrix));
   }
   printf("eval\n====\n");
-  matrix_print(m, n, matrix);
+  matrix_print(m, n, matrix[current]);
 }
 
 void chaleur_par(int m, int n, int np, double td, double h) {
   int processors, rank, i, j, start, end, offset;
-  double matrix[m][n];
+  int current = 0;
+  double matrix[2][m][n];
   MPI_Status status;
   MPI_Comm_size(MPI_COMM_WORLD, &processors);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   if(rank == MASTER_WORKER) {
     matrix_init(m, n, matrix);
+
+    printf("init\n====\n");
+    matrix_print(m, n, matrix[current]);
+
     int workers, average_row, extra, destination;
     workers     = processors - 1;
     average_row = m / workers;
@@ -149,7 +161,8 @@ void chaleur_par(int m, int n, int np, double td, double h) {
       MPI_Recv(&matrix[msg.offset][0], msg.row * n, MPI_DOUBLE, i, DONE_TAG, MPI_COMM_WORLD, &status);
     }
 
-    matrix_print(m, n, matrix);
+    printf("eval\n====\n");
+    matrix_print(m, n, matrix[current]);
   } else {
     struct Message msg;
     MPI_Recv(&msg, 1, mpi_message_type, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
@@ -162,29 +175,25 @@ void chaleur_par(int m, int n, int np, double td, double h) {
 
     DEBUG_PRINT("recv => worker=%d, start=%d, end=%d\n", rank, start, end);
     for(i = 0; i < np; i++) {
-      double m2[m][n];
-      memset(m2, 0, sizeof(m2));
-
+      current = i % 2;
       // left neighbor
       if(msg.left != -1) {
-        MPI_Send(&m2[msg.offset][0], n, MPI_FLOAT, msg.left, RIGHT_TAG, MPI_COMM_WORLD);
-        MPI_Recv(&m2[msg.offset-1][0], n, MPI_FLOAT, msg.left, LEFT_TAG, MPI_COMM_WORLD, &status);
+        MPI_Send(&matrix[current][msg.offset][0], n, MPI_FLOAT, msg.left, RIGHT_TAG, MPI_COMM_WORLD);
+        MPI_Recv(&matrix[current][msg.offset-1][0], n, MPI_FLOAT, msg.left, LEFT_TAG, MPI_COMM_WORLD, &status);
       }
 
       // right neighbor
       if(msg.right != -1) {
-        MPI_Send(&m2[msg.offset+msg.row-1][0], n, MPI_FLOAT, msg.right, LEFT_TAG, MPI_COMM_WORLD);
-        MPI_Recv(&m2[msg.offset+msg.row][0], n, MPI_FLOAT, msg.right, RIGHT_TAG, MPI_COMM_WORLD, &status);
+        MPI_Send(&matrix[current][msg.offset+msg.row-1][0], n, MPI_FLOAT, msg.right, LEFT_TAG, MPI_COMM_WORLD);
+        MPI_Recv(&matrix[current][msg.offset+msg.row][0], n, MPI_FLOAT, msg.right, RIGHT_TAG, MPI_COMM_WORLD, &status);
       }
 
-      // update
+      // we are now able to set the value
       for(int a = start; a <= end; a++) {
         for(int b = 1; b < n - 2; b++) {
-          m2[a][b] = 1;
+          matrix[current][a][b] = 1;
         }
       }
-
-      memcpy(matrix, m2, sizeof(matrix));
     }
     DEBUG_PRINT("DONE\n");
     MPI_Send(&msg, 1, mpi_message_type, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
@@ -192,12 +201,15 @@ void chaleur_par(int m, int n, int np, double td, double h) {
   }
 }
 
-void matrix_init(int m, int n, double matrix[m][n]) {
+void matrix_init(int m, int n, double matrix[2][m][n]) {
   int i, j;
 
-  for(i = 0; i < m; i++)
-    for(j = 0; j < n; j++)
-      matrix[i][j] = (i * (m - i - 1)) * (j * (n - j - 1));
+  for(i = 0; i < m; i++) {
+    for(j = 0; j < n; j++) {
+      matrix[0][i][j] = (i * (m - i - 1)) * (j * (n - j - 1));
+      matrix[1][i][j] = matrix[0][i][j];
+    }
+  }
 }
 
 void matrix_print(int m, int n, double matrix[m][n]) {
