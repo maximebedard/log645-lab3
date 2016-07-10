@@ -33,8 +33,8 @@ double get_current_time();
 MPI_Datatype mpi_message_type;
 
 struct Message {
-  int offset;
-  int row;
+  int x_offset;
+  int y_offset;
   int left;
   int right;
 };
@@ -137,28 +137,28 @@ void chaleur_par(int m, int n, int np, double td, double h) {
     DEBUG_PRINT("workers=%d average_row=%d extra=%d\n", workers, average_row, extra);
     for(i = 1; i <= workers; i++) {
       struct Message msg;
-      msg.offset = offset;
-      msg.row    = (i <= extra) ? average_row + 1 : average_row;
-      msg.left   = (i == 1 ? -1 : i - 1);
-      msg.right  = (i == workers ? -1 : i + 1);
+      msg.x_offset = offset;
+      msg.y_offset = (i <= extra) ? average_row + 1 : average_row;
+      msg.left     = (i == 1 ? -1 : i - 1);
+      msg.right    = (i == workers ? -1 : i + 1);
 
       // destination
       destination = i;
 
       MPI_Send(&msg, 1, mpi_message_type, destination, START_TAG, MPI_COMM_WORLD);
-      MPI_Send(&matrix[msg.offset][0], msg.row * n, MPI_DOUBLE, destination, START_TAG, MPI_COMM_WORLD);
+      MPI_Send(&matrix[msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, destination, START_TAG, MPI_COMM_WORLD);
       DEBUG_PRINT(
-        "send => dest=%d, offset=%d, row=%d, left=%d, right=%d\n",
-        destination, msg.offset, msg.row, msg.left, msg.right
+        "send => dest=%d, x_offset=%d, y_offset=%d, left=%d, right=%d\n",
+        destination, msg.x_offset, msg.y_offset, msg.left, msg.right
       );
 
-      offset += msg.row;
+      offset += msg.y_offset;
     }
 
     for(i = 1; i <= workers; i++) {
       struct Message msg;
       MPI_Recv(&msg, 1, mpi_message_type, i, DONE_TAG, MPI_COMM_WORLD, &status);
-      MPI_Recv(&matrix[msg.offset][0], msg.row * n, MPI_DOUBLE, i, DONE_TAG, MPI_COMM_WORLD, &status);
+      MPI_Recv(&matrix[msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, i, DONE_TAG, MPI_COMM_WORLD, &status);
     }
 
     printf("eval\n====\n");
@@ -166,26 +166,26 @@ void chaleur_par(int m, int n, int np, double td, double h) {
   } else {
     struct Message msg;
     MPI_Recv(&msg, 1, mpi_message_type, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
-    MPI_Recv(&matrix[msg.offset][0], msg.row * n, MPI_DOUBLE, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
+    MPI_Recv(&matrix[msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
 
-    start = msg.offset;
-    end   = msg.offset + msg.row - 1;
-    if(msg.offset == 0) start = 1;
-    if(msg.offset + msg.row == m) end -= 1;
+    start = msg.x_offset;
+    end   = msg.x_offset + msg.y_offset - 1;
+    if(msg.x_offset == 0) start = 1;
+    if(msg.x_offset + msg.y_offset == m) end -= 1;
 
     DEBUG_PRINT("recv => worker=%d, start=%d, end=%d\n", rank, start, end);
     for(i = 0; i < np; i++) {
       current = i % 2;
       // left neighbor
       if(msg.left != -1) {
-        MPI_Send(&matrix[current][msg.offset][0], n, MPI_FLOAT, msg.left, RIGHT_TAG, MPI_COMM_WORLD);
-        MPI_Recv(&matrix[current][msg.offset-1][0], n, MPI_FLOAT, msg.left, LEFT_TAG, MPI_COMM_WORLD, &status);
+        MPI_Send(&matrix[current][msg.x_offset][0], n, MPI_FLOAT, msg.left, RIGHT_TAG, MPI_COMM_WORLD);
+        MPI_Recv(&matrix[current][msg.x_offset-1][0], n, MPI_FLOAT, msg.left, LEFT_TAG, MPI_COMM_WORLD, &status);
       }
 
       // right neighbor
       if(msg.right != -1) {
-        MPI_Send(&matrix[current][msg.offset+msg.row-1][0], n, MPI_FLOAT, msg.right, LEFT_TAG, MPI_COMM_WORLD);
-        MPI_Recv(&matrix[current][msg.offset+msg.row][0], n, MPI_FLOAT, msg.right, RIGHT_TAG, MPI_COMM_WORLD, &status);
+        MPI_Send(&matrix[current][msg.x_offset+msg.y_offset-1][0], n, MPI_FLOAT, msg.right, LEFT_TAG, MPI_COMM_WORLD);
+        MPI_Recv(&matrix[current][msg.x_offset+msg.y_offset][0], n, MPI_FLOAT, msg.right, RIGHT_TAG, MPI_COMM_WORLD, &status);
       }
 
       // we are now able to set the value
@@ -197,7 +197,7 @@ void chaleur_par(int m, int n, int np, double td, double h) {
     }
     DEBUG_PRINT("DONE\n");
     MPI_Send(&msg, 1, mpi_message_type, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
-    MPI_Send(&matrix[msg.offset][0], msg.row*n, MPI_FLOAT, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
+    MPI_Send(&matrix[msg.x_offset][0], msg.y_offset*n, MPI_FLOAT, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
   }
 }
 
@@ -232,8 +232,8 @@ void types_init() {
   int blocklengths[4] = {1, 1, 1, 1};
   MPI_Datatype types[4] = {MPI_INT, MPI_INT, MPI_INT, MPI_INT};
   MPI_Aint offsets[4];
-  offsets[0] = offsetof(struct Message, offset);
-  offsets[1] = offsetof(struct Message, row);
+  offsets[0] = offsetof(struct Message, x_offset);
+  offsets[1] = offsetof(struct Message, y_offset);
   offsets[2] = offsetof(struct Message, left);
   offsets[3] = offsetof(struct Message, right);
   MPI_Type_create_struct(4, blocklengths, offsets, types, &mpi_message_type);
