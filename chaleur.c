@@ -97,11 +97,11 @@ void chaleur_seq(int m, int n, int np, double tdh2) {
       for(j = 1; j < n - 1; j++) {
         usleep(SLEEP_TIME);
 
-        DEBUG_PRINT("matrix[current=%d][i=%d][j=%d]=%.2f\n", current, i, j, matrix[current][i][j]);
-        DEBUG_PRINT("up   =%.2f\n", matrix[1-current][i - 1][j]);
-        DEBUG_PRINT("down =%.2f\n", matrix[1-current][i + 1][j]);
-        DEBUG_PRINT("left =%.2f\n", matrix[1-current][i][j - 1]);
-        DEBUG_PRINT("right=%.2f\n", matrix[1-current][i][j + 1]);
+        // DEBUG_PRINT("matrix[current=%d][i=%d][j=%d]=%.2f\n", current, i, j, matrix[current][i][j]);
+        // DEBUG_PRINT("up   =%.2f\n", matrix[1-current][i - 1][j]);
+        // DEBUG_PRINT("down =%.2f\n", matrix[1-current][i + 1][j]);
+        // DEBUG_PRINT("left =%.2f\n", matrix[1-current][i][j - 1]);
+        // DEBUG_PRINT("right=%.2f\n", matrix[1-current][i][j + 1]);
 
         matrix[current][i][j] = (1.0 - (4.0 * tdh2)) * matrix[1-current][i][j] +
           tdh2 * (matrix[1-current][i - 1][j] +
@@ -147,57 +147,60 @@ void chaleur_par(int m, int n, int np, double tdh2) {
       destination = i;
 
       MPI_Send(&msg, 1, mpi_message_type, destination, START_TAG, MPI_COMM_WORLD);
-      MPI_Send(&matrix[0][msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, destination, START_TAG, MPI_COMM_WORLD);
+      MPI_Send(&matrix[current][msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, destination, START_TAG, MPI_COMM_WORLD);
       DEBUG_PRINT(
         "send => dest=%d, x_offset=%d, y_offset=%d, left=%d, right=%d\n",
         destination, msg.x_offset, msg.y_offset, msg.left, msg.right
       );
 
       offset += msg.y_offset;
+      printf("offset=%d\n", offset);
     }
 
     for(i = 1; i <= workers; i++) {
       struct Message msg;
       MPI_Recv(&msg, 1, mpi_message_type, i, DONE_TAG, MPI_COMM_WORLD, &status);
-      MPI_Recv(&matrix[0][msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, i, DONE_TAG, MPI_COMM_WORLD, &status);
+      MPI_Recv(&matrix[current][msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, i, DONE_TAG, MPI_COMM_WORLD, &status);
     }
 
     printf("eval\n====\n");
-    matrix_print(m, n, matrix[0]);
+    matrix_print(m, n, matrix[current]);
   } else {
     struct Message msg;
     MPI_Recv(&msg, 1, mpi_message_type, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
-    MPI_Recv(&matrix[0][msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
-
+    MPI_Recv(&matrix[current][msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
     start = msg.x_offset;
     end   = msg.x_offset + msg.y_offset - 1;
     if(msg.x_offset == 0) start = 1;
     if(msg.x_offset + msg.y_offset == m) end -= 1;
 
-    DEBUG_PRINT("recv => worker=%d, start=%d, end=%d\n", rank, start, end);
+    DEBUG_PRINT("recv => worker=%d, start=%d, end=%d, x_offset=%d, y_offset=%d\n", rank, start, end, msg.x_offset, msg.y_offset);
     for(i = 0; i < np; i++) {
       current = i % 2;
       // left neighbor
       if(msg.left != -1) {
         MPI_Send(&matrix[current][msg.x_offset][0], n, MPI_FLOAT, msg.left, RIGHT_TAG, MPI_COMM_WORLD);
-        MPI_Recv(&matrix[current][msg.x_offset-1][0], n, MPI_FLOAT, msg.left, LEFT_TAG, MPI_COMM_WORLD, &status);
+        MPI_Recv(&matrix[current][msg.x_offset - 1][0], n, MPI_FLOAT, msg.left, LEFT_TAG, MPI_COMM_WORLD, &status);
       }
 
       // right neighbor
       if(msg.right != -1) {
-        MPI_Send(&matrix[current][msg.x_offset+msg.y_offset-1][0], n, MPI_FLOAT, msg.right, LEFT_TAG, MPI_COMM_WORLD);
-        MPI_Recv(&matrix[current][msg.x_offset+msg.y_offset][0], n, MPI_FLOAT, msg.right, RIGHT_TAG, MPI_COMM_WORLD, &status);
+        MPI_Send(&matrix[current][msg.x_offset + msg.y_offset-1][0], n, MPI_FLOAT, msg.right, LEFT_TAG, MPI_COMM_WORLD);
+        MPI_Recv(&matrix[current][msg.x_offset + msg.y_offset][0], n, MPI_FLOAT, msg.right, RIGHT_TAG, MPI_COMM_WORLD, &status);
       }
 
       // we are now able to set the value
+      // printf("n=%d\n", n);
       for(int a = start; a <= end; a++) {
-        for(int b = 1; b < n - 2; b++) {
-          matrix[current][a][b] = 1;
+        for(int b = 1; b < n; b++) {
+          // printf("a=%d b=%d\n", a,b);
+          matrix[current][a][b] = 3;
         }
       }
     }
+    printf("y_offset=%d\n", msg.y_offset);
     MPI_Send(&msg, 1, mpi_message_type, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
-    MPI_Send(&matrix[current][msg.x_offset][0], msg.y_offset*n, MPI_FLOAT, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
+    MPI_Send(&matrix[current][msg.x_offset][0], msg.y_offset * n, MPI_FLOAT, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
   }
   DEBUG_PRINT("done => worker%d\n", rank);
 }
