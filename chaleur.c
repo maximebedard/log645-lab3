@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
   h    = atof(argv[5]);
 
   if (rank == 0) {
-    printf("m=%d, n=%d, np=%d, td=%.2f, h=%.2f, tdh2=%.2f\n", m, n, np, td, h, tdh2);
+    printf("m=%d, n=%d, np=%d, td=%.5f, h=%.5f\n", m, n, np, td, h);
 
     printf("Version parallèle\n");
     start = get_current_time();
@@ -115,7 +115,7 @@ void chaleur_par(int m, int n, int np, double td, double h) {
   MPI_Status status;
   MPI_Comm_size(MPI_COMM_WORLD, &processors);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
+  memset(&matrix, 0.0, sizeof(matrix));
   if(rank == MASTER_WORKER) {
     matrix_init(m, n, matrix);
 
@@ -139,10 +139,10 @@ void chaleur_par(int m, int n, int np, double td, double h) {
       MPI_Send(&msg, 1, mpi_message_type, i, START_TAG, MPI_COMM_WORLD);
       MPI_Send(&matrix[current][msg.x_offset][0], msg.y_offset * m, MPI_DOUBLE, i, START_TAG, MPI_COMM_WORLD);
 
-      DEBUG_PRINT(
-        "send => destination=%d, x_offset=%d, y_offset=%d, left=%d, right=%d\n",
-        i, msg.x_offset, msg.y_offset, msg.left, msg.right
-      );
+      // DEBUG_PRINT(
+      //   "send => destination=%d, x_offset=%d, y_offset=%d, left=%d, right=%d\n",
+      //   i, msg.x_offset, msg.y_offset, msg.left, msg.right
+      // );
 
       offset += msg.y_offset;
     }
@@ -156,18 +156,23 @@ void chaleur_par(int m, int n, int np, double td, double h) {
     printf("eval\n====\n");
     matrix_print(m, n, matrix[current]);
   } else {
+    // memset(&matrix, 0.0, sizeof(matrix));
+    current = 0;
     struct Message msg;
     MPI_Recv(&msg, 1, mpi_message_type, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
     MPI_Recv(&matrix[current][msg.x_offset][0], msg.y_offset * m, MPI_DOUBLE, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
-    DEBUG_PRINT("yolo\n");
+    //
+    // if(msg.x_offset>1) {
+    //   printf("yolo\n");
+    // }
     start = msg.x_offset;
     end   = msg.x_offset + msg.y_offset - 1;
     if(msg.x_offset == 0) start = 1;
     if(msg.x_offset + msg.y_offset == n) end -= 1;
 
-    DEBUG_PRINT("recv => worker=%d, start=%d, end=%d, x_offset=%d, y_offset=%d\n", rank, start, end, msg.x_offset, msg.y_offset);
-    for(i = 0; i < np; i++) {
-      current = i % 2;
+    for(i = 1; i <= np; i++) {
+      // current = i % 2;
+      // printf("current=%d\n", current);
       // left neighbor
       if(msg.left != -1) {
         MPI_Send(&matrix[current][msg.x_offset][0], m, MPI_FLOAT, msg.left, RIGHT_TAG, MPI_COMM_WORLD);
@@ -181,19 +186,19 @@ void chaleur_par(int m, int n, int np, double td, double h) {
       }
 
       // we are now able to set the value
-      // printf("n=%d\n", n);
-      // for(int a = start; a <= end; a++) {
-      //   for(int b = 1; b <= m - 2; b++) {
-      //     // printf("a=%d b=%d\n", a,b);
-      //     // matrix[current][a*m][b] = 3;
-      //   }
-      // }
+      int a, b;
+      for(a = start; a <= end; a++) {
+        for(b = 1; b <= m - 2; b++) {
+          matrix[1-current][1][1] = 1337; // update crap :/
+          matrix[1-current][2][2] = 1337; // update crap :/
+        }
+      }
+      current = 1 - current;
     }
 
     MPI_Send(&msg, 1, mpi_message_type, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
     MPI_Send(&matrix[current][msg.x_offset][0], msg.y_offset * m, MPI_FLOAT, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
   }
-  // DEBUG_PRINT("done => worker%d\n", rank);
 }
 
 void matrix_init(int m, int n, double matrix[2][m][n]) {
