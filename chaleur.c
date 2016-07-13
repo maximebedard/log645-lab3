@@ -21,8 +21,8 @@
 #  define DEBUG_PRINT(...) do{ } while (0)
 #endif
 
-void chaleur_seq(int m, int n, int np, double td, double h);
-void chaleur_par(int m, int n, int np, double td, double h);
+void chaleur_seq(int m, int n, double matrix[2][m][n], int np, double td, double h);
+void chaleur_par(int m, int n, double matrix[2][m][n], int np, double td, double h);
 
 void matrix_init(int m, int n, double matrix[2][m][n]);
 void matrix_zero(int m, int n, double matrix[2][m][n]);
@@ -42,7 +42,7 @@ struct Message {
 
 int main(int argc, char **argv) {
   int err, rank, m, n, np;
-  double start, end, td, h, tdh2;
+  double start, end, td, h;
 
   err = MPI_Init(&argc, &argv);
 
@@ -55,43 +55,49 @@ int main(int argc, char **argv) {
   td   = atof(argv[4]);
   h    = atof(argv[5]);
 
-  if (rank == 0) {
+
+  if (rank == MASTER_WORKER) {
     printf("m=%d, n=%d, np=%d, td=%.5f, h=%.5f\n", m, n, np, td, h);
+    double matrix[2][m][n];
 
     printf("Version parallèle\n");
+    matrix_init(m, n, matrix);
+    printf("init\n====\n");
+    matrix_print(m, n, matrix[0]);
     start = get_current_time();
-    chaleur_par(m, n, np, td, h);
+    chaleur_par(m, n, matrix, np, td, h);
     end = get_current_time();
     double dt_par = end - start;
+    printf("final\n=====\n");
+    matrix_print(m, n, matrix[0]);
     printf("Temps d'éxecution : %f\n", dt_par);
 
     printf("Version séquentielle\n");
+    matrix_init(m, n, matrix);
+    printf("init\n====\n");
+    matrix_print(m, n, matrix[0]);
     start = get_current_time();
-    chaleur_seq(m, n, np, td, h);
+    chaleur_seq(m, n, matrix, np, td, h);
     end = get_current_time();
     double dt_seq = end - start;
+    printf("final\n====\n");
+    matrix_print(m, n, matrix[0]);
     printf("Temps d'éxecution : %f\n", dt_seq);
   } else {
-    chaleur_par(m, n, np, td, h);
+    double matrix[2][m][n];
+    matrix_zero(m, n, matrix);
+    chaleur_par(m, n, matrix, np, td, h);
   }
 
   err = MPI_Finalize();
   return err;
 }
 
-void chaleur_seq(int m, int n, int np, double td, double h) {
-  double matrix[2][m][n];
+void chaleur_seq(int m, int n, double matrix[2][m][n], int np, double td, double h) {
   int i, j, k;
   int current = 0;
 
-  matrix_init(m, n, matrix);
-
-  printf("init\n====\n");
-  matrix_print(m, n, matrix[current]);
-
   for(k = 1; k < np; k++) {
-    current = k % 2;
-
     for(i = 1; i < m - 1; i++) {
       for(j = 1; j < n - 1; j++) {
         usleep(SLEEP_TIME);
@@ -103,27 +109,20 @@ void chaleur_seq(int m, int n, int np, double td, double h) {
                   matrix[1-current][i][j + 1]);
       }
     }
+
+    current = k % 2;
   }
-  printf("eval\n====\n");
-  matrix_print(m, n, matrix[current]);
 }
 
-void chaleur_par(int m, int n, int np, double td, double h) {
+void chaleur_par(int m, int n, double matrix[2][m][n], int np, double td, double h) {
   int processors, rank, i, j, start, end, offset;
   int current = 0;
-  double matrix[2][m][n];
 
   MPI_Status status;
   MPI_Comm_size(MPI_COMM_WORLD, &processors);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-
   if(rank == MASTER_WORKER) {
-    matrix_init(m, n, matrix);
-
-    printf("init\n====\n");
-    matrix_print(m, n, matrix[current]);
-
     int workers, average_row, extra;
     workers     = processors - 1;
     average_row = m / workers;
@@ -154,16 +153,11 @@ void chaleur_par(int m, int n, int np, double td, double h) {
       MPI_Recv(&msg, 1, mpi_message_type, i, DONE_TAG, MPI_COMM_WORLD, &status);
       MPI_Recv(&matrix[current][msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, i, DONE_TAG, MPI_COMM_WORLD, &status);
     }
-
-    printf("eval\n====\n");
-    matrix_print(m, n, matrix[current]);
   } else {
-    matrix_zero(m, n, matrix);
-
     current = 0;
     struct Message msg;
     MPI_Recv(&msg, 1, mpi_message_type, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
-    MPI_Recv(&matrix[0][msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
+    MPI_Recv(&matrix[current][msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
     // printf("eval\n");
     // matrix_print(m, n, matrix[0]);
 
@@ -171,7 +165,7 @@ void chaleur_par(int m, int n, int np, double td, double h) {
     end   = msg.x_offset + msg.y_offset - 1;
     if(msg.x_offset == 0) start = 1;
     if(msg.x_offset + msg.y_offset == m) end -= 1;
-    //
+
     for(i = 1; i < np; i++) {
       // current = i % 2;
       // printf("current=%d\n", current);
@@ -220,7 +214,7 @@ void matrix_init(int m, int n, double matrix[2][m][n]) {
 void matrix_zero(int m, int n, double matrix[2][m][n]) {
   int i, j;
 
-  for(i = 0; i <m ; i++){
+  for(i = 0; i < m ; i++){
     for(j = 0; j < n; j++){
       matrix[0][i][j] = 0.0;
       matrix[1][i][j] = 0.0;
