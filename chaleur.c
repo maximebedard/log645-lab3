@@ -13,7 +13,7 @@
 #define DONE_TAG      5
 #define START_TAG     6
 
-#define DEBUG 1
+// #define DEBUG 1
 
 #ifdef DEBUG
 #  define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while(0)
@@ -44,10 +44,15 @@ int main(int argc, char **argv) {
   int err, rank, m, n, np;
   double start, end, td, h;
 
-  err = MPI_Init(&argc, &argv);
-
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  types_init();
+  // if(argc < 6) {
+  //   printf("Veuillez au moins fournir 5 arguments.\n");
+  //   printf("  m  = nombre de lignes\n");
+  //   printf("  n  = nombre de colonnes\n");
+  //   printf("  np = nombre de pas de temps\n");
+  //   printf("  td = temps discrétisé\n");
+  //   printf("  h  = la taille d’un côté d’une subdivision\n");
+  //   exit(1);
+  // }
 
   m    = atoi(argv[1]);
   n    = atoi(argv[2]);
@@ -55,6 +60,10 @@ int main(int argc, char **argv) {
   td   = atof(argv[4]);
   h    = atof(argv[5]);
 
+  err = MPI_Init(&argc, &argv);
+
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  types_init();
 
   if (rank == MASTER_WORKER) {
     printf("m=%d, n=%d, np=%d, td=%.5f, h=%.5f\n", m, n, np, td, h);
@@ -82,9 +91,9 @@ int main(int argc, char **argv) {
     double dt_seq = end - start;
     printf("final\n====\n");
     matrix_print(m, n, matrix[0]);
+    printf("Temps d'éxecution : %f\n", dt_seq);
     printf("Accélération : %f\n", dt_seq/dt_par);
     printf("Efficacité: %f\n", 1);
-    printf("Temps d'éxecution : %f\n", dt_seq);
   } else {
     double matrix[2][m][n];
     matrix_zero(m, n, matrix);
@@ -117,7 +126,8 @@ void chaleur_seq(int m, int n, double matrix[2][m][n], int np, double td, double
 }
 
 void chaleur_par(int m, int n, double matrix[2][m][n], int np, double td, double h) {
-  int processors, rank, i, j, start, end, offset;
+  int processors, rank, i, j, k, slice_start, slice_end;
+  int workers, columns, remaining, x_offset;
   int current = 0;
 
   MPI_Status status;
@@ -125,29 +135,28 @@ void chaleur_par(int m, int n, double matrix[2][m][n], int np, double td, double
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   if(rank == MASTER_WORKER) {
-    int workers, average_row, extra;
-    workers     = processors - 1;
-    average_row = m / workers;
-    extra       = m % workers;
-    offset      = 0;
+    workers   = processors - 1;
+    columns   = m / workers;
+    remaining = m % workers;
+    x_offset  = 0;
 
-    // DEBUG_PRINT("workers=%d average_row=%d extra=%d\n", workers, average_row, extra);
+    DEBUG_PRINT("workers=%d columns=%d remaining=%d\n", workers, columns, remaining);
     for(i = 1; i <= workers; i++) {
       struct Message msg;
-      msg.x_offset = offset;
-      msg.y_offset = (i <= extra) ? average_row + 1 : average_row;
+      msg.x_offset = x_offset;
+      msg.y_offset = (i <= remaining) ? columns + 1 : columns;
       msg.left     = (i == 1 ? -1 : i - 1);
       msg.right    = (i == workers ? -1 : i + 1);
 
       MPI_Send(&msg, 1, mpi_message_type, i, START_TAG, MPI_COMM_WORLD);
       MPI_Send(&matrix[current][msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, i, START_TAG, MPI_COMM_WORLD);
 
-      // DEBUG_PRINT(
-      //   "send => destination=%d, x_offset=%d, y_offset=%d, left=%d, right=%d\n",
-      //   i, msg.x_offset, msg.y_offset, msg.left, msg.right
-      // );
+      DEBUG_PRINT(
+        "send => destination=%d, x_offset=%d, y_offset=%d, left=%d, right=%d\n",
+        i, msg.x_offset, msg.y_offset, msg.left, msg.right
+      );
 
-      offset += msg.y_offset;
+      x_offset += msg.y_offset;
     }
 
     for(i = 1; i <= workers; i++) {
@@ -160,40 +169,50 @@ void chaleur_par(int m, int n, double matrix[2][m][n], int np, double td, double
     struct Message msg;
     MPI_Recv(&msg, 1, mpi_message_type, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
     MPI_Recv(&matrix[current][msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
-    // printf("eval\n");
-    // matrix_print(m, n, matrix[0]);
 
-    start = msg.x_offset;
-    end   = msg.x_offset + msg.y_offset - 1;
-    if(msg.x_offset == 0) start = 1;
-    if(msg.x_offset + msg.y_offset == m) end -= 1;
+    slice_start = msg.x_offset;
+    slice_end   = msg.x_offset + msg.y_offset - 1;
+    if(msg.x_offset == 0) slice_start = 1;
+    if(msg.x_offset + msg.y_offset == m) slice_end -= 1;
 
-    for(i = 1; i < np; i++) {
-      // current = i % 2;
-      // printf("current=%d\n", current);
+    for(k = 1; k < np; k++) {
       // left neighbor
       if(msg.left != -1) {
-        MPI_Send(&matrix[current][msg.x_offset][0], n, MPI_DOUBLE, msg.left, RIGHT_TAG, MPI_COMM_WORLD);
-        MPI_Recv(&matrix[current][msg.x_offset - 1][0], n, MPI_DOUBLE, msg.left, LEFT_TAG, MPI_COMM_WORLD, &status);
+        MPI_Send(
+          &matrix[current][msg.x_offset][0],
+          n, MPI_DOUBLE, msg.left, RIGHT_TAG, MPI_COMM_WORLD
+        );
+        MPI_Recv(
+          &matrix[current][msg.x_offset - 1][0],
+          n, MPI_DOUBLE, msg.left, LEFT_TAG, MPI_COMM_WORLD, &status
+        );
       }
 
       // right neighbor
       if(msg.right != -1) {
-        MPI_Send(&matrix[current][msg.x_offset + msg.y_offset - 1][0], n, MPI_DOUBLE, msg.right, LEFT_TAG, MPI_COMM_WORLD);
-        MPI_Recv(&matrix[current][msg.x_offset + msg.y_offset][0], n, MPI_DOUBLE, msg.right, RIGHT_TAG, MPI_COMM_WORLD, &status);
+        MPI_Send(
+          &matrix[current][msg.x_offset + msg.y_offset - 1][0],
+          n, MPI_DOUBLE, msg.right, LEFT_TAG, MPI_COMM_WORLD
+        );
+        MPI_Recv(
+          &matrix[current][msg.x_offset + msg.y_offset][0],
+          n, MPI_DOUBLE, msg.right, RIGHT_TAG, MPI_COMM_WORLD, &status
+        );
       }
 
       // we are now able to set the value
-      int a, b;
-      for(a = start; a <= end; a++) {
-        for(b = 1; b < n - 1; b++) {
-          matrix[1-current][a][b]= (1.0 - 4*td / h*h) * matrix[current][a][b] +
-            (td/h*h) * (matrix[current][a - 1][b] +
-                    matrix[current][a + 1][b] +
-                    matrix[current][a][b - 1] +
-                    matrix[current][a][b + 1]);
+      for(i = slice_start; i <= slice_end; i++) {
+        for(j = 1; j < n - 1; j++) {
+          usleep(SLEEP_TIME);
+          matrix[1-current][i][j]= (1.0 - 4*td / h*h) * matrix[current][i][j] +
+            (td/h*h) * (matrix[current][i - 1][j] +
+                    matrix[current][i + 1][j] +
+                    matrix[current][i][j - 1] +
+                    matrix[current][i][j + 1]);
         }
       }
+
+      // flip-flop
       current = 1 - current;
     }
 
@@ -219,7 +238,7 @@ void matrix_zero(int m, int n, double matrix[2][m][n]) {
   for(i = 0; i < m ; i++){
     for(j = 0; j < n; j++){
       matrix[0][i][j] = 0.0;
-      matrix[1][i][j] = 0.0;
+      matrix[1][i][j] = matrix[0][i][j];
     }
   }
 }
