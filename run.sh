@@ -11,7 +11,17 @@ if [ "$#" -ne 6 ]; then
   exit 1
 fi
 
-if [ $1 -gt 5 ] && [ $2 -gt 5 ] && [ $3 -gt 1 ] && [ $4 -gt 0.00001 ] && [ $5 -gt 0.00001 ] && [ $6 -gt 3 ]; then
+
+dec=0.00001
+td=$5
+h=$6
+
+if [ $1 -gt 5 ] &&
+  [ $2 -gt 5 ] &&
+  [ $3 -gt 1 ] &&
+  [ 1 -eq "$(echo "${td} > ${dec}" | bc)" ] &&
+  [ 1 -eq "$(echo "${h} > ${dec}" | bc)" ] &&
+  [ $6 -gt 3 ]; then
   mpirun -n $6 --hostfile ./hostfile ./chaleur $1 $2 $3 $4 $5
 else
   echo "Un des paramètres est invalide. Veuillez réessayer."
