@@ -25,6 +25,7 @@ void chaleur_seq(int m, int n, int np, double td, double h);
 void chaleur_par(int m, int n, int np, double td, double h);
 
 void matrix_init(int m, int n, double matrix[2][m][n]);
+void matrix_zero(int m, int n, double matrix[2][m][n]);
 void matrix_print(int m, int n, double matrix[m][n]);
 
 void types_init();
@@ -115,7 +116,8 @@ void chaleur_par(int m, int n, int np, double td, double h) {
   MPI_Status status;
   MPI_Comm_size(MPI_COMM_WORLD, &processors);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  memset(&matrix, 0.0, sizeof(matrix));
+
+
   if(rank == MASTER_WORKER) {
     matrix_init(m, n, matrix);
 
@@ -156,15 +158,13 @@ void chaleur_par(int m, int n, int np, double td, double h) {
     printf("eval\n====\n");
     matrix_print(m, n, matrix[current]);
   } else {
-    // memset(&matrix, 0.0, sizeof(matrix));
+    matrix_zero(m, n, matrix);
+
     current = 0;
     struct Message msg;
     MPI_Recv(&msg, 1, mpi_message_type, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
     MPI_Recv(&matrix[current][msg.x_offset][0], msg.y_offset * m, MPI_DOUBLE, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
-    //
-    // if(msg.x_offset>1) {
-    //   printf("yolo\n");
-    // }
+
     start = msg.x_offset;
     end   = msg.x_offset + msg.y_offset - 1;
     if(msg.x_offset == 0) start = 1;
@@ -187,12 +187,16 @@ void chaleur_par(int m, int n, int np, double td, double h) {
 
       // we are now able to set the value
       int a, b;
-      for(a = start; a <= end; a++) {
-        for(b = 1; b <= m - 2; b++) {
-          matrix[1-current][1][1] = 1337; // update crap :/
-          matrix[1-current][2][2] = 1337; // update crap :/
-        }
-      }
+
+      // for(a = start; a <= end; a++) {
+      //   for(b = 1; b <= m - 2; b++) {
+      //     matrix[current][1][1]=1337;
+      //     // matrix[1-current][a][b]=1337;
+      //     // *((&matrix[1-current][0][0])+a*m+b) = 1337;
+      //     // matrix[1-current][1][1] = 1337; // update crap :/
+      //     // matrix[1-current][2][2] = 1337; // update crap :/
+      //   }
+      // }
       current = 1 - current;
     }
 
@@ -208,6 +212,17 @@ void matrix_init(int m, int n, double matrix[2][m][n]) {
     for(j = 0; j < n; j++) {
       matrix[0][i][j] = (double)(i * (m - i - 1)) * (j * (n - j - 1));
       matrix[1][i][j] = matrix[0][i][j];
+    }
+  }
+}
+
+void matrix_zero(int m, int n, double matrix[2][m][n]) {
+  int i, j;
+
+  for(i = 0; i <m ; i++){
+    for(j = 0; j < n; j++){
+      matrix[0][i][j] = 0.0;
+      matrix[1][i][j] = 0.0;
     }
   }
 }
