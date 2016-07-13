@@ -13,7 +13,7 @@
 #define DONE_TAG      5
 #define START_TAG     6
 
-// #define DEBUG 1
+#define DEBUG 1
 
 #ifdef DEBUG
 #  define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while(0)
@@ -21,8 +21,8 @@
 #  define DEBUG_PRINT(...) do{ } while (0)
 #endif
 
-void chaleur_seq(int m, int n, int np, double tdh2);
-void chaleur_par(int m, int n, int np, double tdh2);
+void chaleur_seq(int m, int n, int np, double td, double h);
+void chaleur_par(int m, int n, int np, double td, double h);
 
 void matrix_init(int m, int n, double matrix[2][m][n]);
 void matrix_print(int m, int n, double matrix[m][n]);
@@ -53,34 +53,32 @@ int main(int argc, char **argv) {
   np   = atoi(argv[3]);
   td   = atof(argv[4]);
   h    = atof(argv[5]);
-  tdh2 = td / (h * h);
-
 
   if (rank == 0) {
     printf("m=%d, n=%d, np=%d, td=%.2f, h=%.2f, tdh2=%.2f\n", m, n, np, td, h, tdh2);
 
     printf("Version parallèle\n");
     start = get_current_time();
-    chaleur_par(m, n, np, tdh2);
+    chaleur_par(m, n, np, td, h);
     end = get_current_time();
     double dt_par = end - start;
     printf("Temps d'éxecution : %f\n", dt_par);
 
     printf("Version séquentielle\n");
     start = get_current_time();
-    chaleur_seq(m, n, np, tdh2);
+    chaleur_seq(m, n, np, td, h);
     end = get_current_time();
     double dt_seq = end - start;
     printf("Temps d'éxecution : %f\n", dt_seq);
   } else {
-    chaleur_par(m, n, np, tdh2);
+    chaleur_par(m, n, np, td, h);
   }
 
   err = MPI_Finalize();
   return err;
 }
 
-void chaleur_seq(int m, int n, int np, double tdh2) {
+void chaleur_seq(int m, int n, int np, double td, double h) {
   double matrix[2][m][n];
   int i, j, k;
   int current = 0;
@@ -97,14 +95,8 @@ void chaleur_seq(int m, int n, int np, double tdh2) {
       for(j = 1; j < n - 1; j++) {
         usleep(SLEEP_TIME);
 
-        // DEBUG_PRINT("matrix[current=%d][i=%d][j=%d]=%.2f\n", current, i, j, matrix[current][i][j]);
-        // DEBUG_PRINT("up   =%.2f\n", matrix[1-current][i - 1][j]);
-        // DEBUG_PRINT("down =%.2f\n", matrix[1-current][i + 1][j]);
-        // DEBUG_PRINT("left =%.2f\n", matrix[1-current][i][j - 1]);
-        // DEBUG_PRINT("right=%.2f\n", matrix[1-current][i][j + 1]);
-
-        matrix[current][i][j] = (1.0 - (4.0 * tdh2)) * matrix[1-current][i][j] +
-          tdh2 * (matrix[1-current][i - 1][j] +
+        matrix[current][i][j] = (1.0 - 4*td / h*h) * matrix[1-current][i][j] +
+          (td/h*h) * (matrix[1-current][i - 1][j] +
                   matrix[1-current][i + 1][j] +
                   matrix[1-current][i][j - 1] +
                   matrix[1-current][i][j + 1]);
@@ -115,7 +107,7 @@ void chaleur_seq(int m, int n, int np, double tdh2) {
   matrix_print(m, n, matrix[current]);
 }
 
-void chaleur_par(int m, int n, int np, double tdh2) {
+void chaleur_par(int m, int n, int np, double td, double h) {
   int processors, rank, i, j, start, end, offset;
   int current = 0;
   double matrix[2][m][n];
@@ -148,13 +140,13 @@ void chaleur_par(int m, int n, int np, double tdh2) {
 
       MPI_Send(&msg, 1, mpi_message_type, destination, START_TAG, MPI_COMM_WORLD);
       MPI_Send(&matrix[current][msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, destination, START_TAG, MPI_COMM_WORLD);
+
       DEBUG_PRINT(
         "send => dest=%d, x_offset=%d, y_offset=%d, left=%d, right=%d\n",
         destination, msg.x_offset, msg.y_offset, msg.left, msg.right
       );
 
       offset += msg.y_offset;
-      printf("offset=%d\n", offset);
     }
 
     for(i = 1; i <= workers; i++) {
@@ -198,7 +190,6 @@ void chaleur_par(int m, int n, int np, double tdh2) {
         }
       }
     }
-    printf("y_offset=%d\n", msg.y_offset);
     MPI_Send(&msg, 1, mpi_message_type, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
     MPI_Send(&matrix[current][msg.x_offset][0], msg.y_offset * n, MPI_FLOAT, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
   }
@@ -210,7 +201,7 @@ void matrix_init(int m, int n, double matrix[2][m][n]) {
 
   for(i = 0; i < m; i++) {
     for(j = 0; j < n; j++) {
-      matrix[0][i][j] = (i * (m - i - 1)) * (j * (n - j - 1));
+      matrix[0][i][j] = (double)(i * (m - i - 1)) * (j * (n - j - 1));
       matrix[1][i][j] = matrix[0][i][j];
     }
   }
