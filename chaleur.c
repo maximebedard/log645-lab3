@@ -195,7 +195,7 @@ void chaleur_par(int m, int n, double matrix[2][m][n], int np, double td, double
       for(i = slice_start; i <= slice_end; i++) {
         for(j = 1; j < n - 1; j++) {
           usleep(SLEEP_TIME);
-          matrix[1-current][i][j]= (1.0 - 4*td / h*h) * matrix[current][i][j] +
+          matrix[1-current][i][j] = (1.0 - 4*td / h*h) * matrix[current][i][j] +
             (td/h*h) * (matrix[current][i - 1][j] +
                     matrix[current][i + 1][j] +
                     matrix[current][i][j - 1] +
