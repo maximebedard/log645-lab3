@@ -44,16 +44,6 @@ int main(int argc, char **argv) {
   int err, rank, m, n, np;
   double start, end, td, h;
 
-  // if(argc < 6) {
-  //   printf("Veuillez au moins fournir 5 arguments.\n");
-  //   printf("  m  = nombre de lignes\n");
-  //   printf("  n  = nombre de colonnes\n");
-  //   printf("  np = nombre de pas de temps\n");
-  //   printf("  td = temps discrétisé\n");
-  //   printf("  h  = la taille d’un côté d’une subdivision\n");
-  //   exit(1);
-  // }
-
   m    = atoi(argv[1]);
   n    = atoi(argv[2]);
   np   = atoi(argv[3]);
@@ -170,6 +160,7 @@ void chaleur_par(int m, int n, double matrix[2][m][n], int np, double td, double
     MPI_Recv(&msg, 1, mpi_message_type, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
     MPI_Recv(&matrix[current][msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, MASTER_WORKER, START_TAG, MPI_COMM_WORLD, &status);
 
+    // On découpe la matrice en rangées en fonction du nombre de workers
     slice_start = msg.x_offset;
     slice_end   = msg.x_offset + msg.y_offset - 1;
     if(msg.x_offset == 0) slice_start = 1;
@@ -216,6 +207,7 @@ void chaleur_par(int m, int n, double matrix[2][m][n], int np, double td, double
       current = 1 - current;
     }
 
+    // send back the message to the master
     MPI_Send(&msg, 1, mpi_message_type, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
     MPI_Send(&matrix[current][msg.x_offset][0], msg.y_offset * n, MPI_DOUBLE, MASTER_WORKER, DONE_TAG, MPI_COMM_WORLD);
   }
