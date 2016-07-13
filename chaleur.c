@@ -82,6 +82,8 @@ int main(int argc, char **argv) {
     double dt_seq = end - start;
     printf("final\n====\n");
     matrix_print(m, n, matrix[0]);
+    printf("Accélération : %f\n", dt_seq/dt_par);
+    printf("Efficacité: %f\n", 1);
     printf("Temps d'éxecution : %f\n", dt_seq);
   } else {
     double matrix[2][m][n];
