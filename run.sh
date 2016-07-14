@@ -1,22 +1,35 @@
 #!/bin/sh
-if [ -z "$*" ]; then
-  echo "Nombre de lignes (n >= 1):"
-  read nbLines
-  echo "Nombre de colonnes (m >= 1):"
-  read nbColumns
-  echo "Nombre de pas de temps (np >= 1):"
-  read timeStep
-  echo "Temps discrétisé (td >= 1):"
-  read descreteTime
-  echo "Taille d'une subdivision (h >= 1):"
-  read subdivisionSize
-  echo "Nombre de processeurs (cpus >= 1):"
-  read nbCpus
-  if [ $nbLines -gt 0 ] && [ $nbColumns -gt 0 ] && [ $timeStep -gt 0 ] && [ $descreteTime -gt 0 ] && [ $subdivisionSize -gt 0 ] && [ $nbCpus -gt 0 ]; then
-    mpirun --hostfile ./hostfile ./chaleur $nbLines $nbColumns $timeStep $descreteTime $subdivisionSize $nbCpus
-  else
-    echo "Parametre invalide. Veuillez essayer a nouveau."
-  fi
+if [ "$#" -ne 6 ]; then
+  echo "Veuillez founir au moins 6 arguments."
+  echo "Aide:"
+  echo "  m   = Nombre de lignes                   (>= 5)"
+  echo "  n   = Nombre de colonnes                 (>= 5)"
+  echo "  np  = Nombre de pas de temps             (>= 1)"
+  echo "  td  = Temps discrétisé                   (>= 0.000001)"
+  echo "  h   = Taille d'un coté d'une subdivision (>= 0.000001)"
+  echo "  cpu = Nombre de CPU                      (>= 3)"
+  exit 1
+fi
+
+
+dec=0.000000001
+td=$5
+h=$6
+
+if [ $1 -gt 5 ] &&
+  [ $2 -gt 5 ] &&
+  [ $3 -gt 1 ] &&
+  [ 1 -eq "$(echo "${td} > ${dec}" | bc)" ] &&
+  [ 1 -eq "$(echo "${h} > ${dec}" | bc)" ] &&
+  [ $6 -gt 3 ]; then
+  mpirun -n $6 --hostfile ./hostfile ./chaleur $1 $2 $3 $4 $5 $6
 else
-  mpirun --hostfile ./hostfile ./chaleur $@
+  echo "Un des paramètres est invalide. Veuillez réessayer."
+  echo "Aide:"
+  echo "  m   = Nombre de lignes                   (>= 5)"
+  echo "  n   = Nombre de colonnes                 (>= 5)"
+  echo "  np  = Nombre de pas de temps             (>= 1)"
+  echo "  td  = Temps discrétisé                   (>= 0.000001)"
+  echo "  h   = Taille d'un coté d'une subdivision (>= 0.000001)"
+  echo "  cpu = Nombre de CPU                      (>= 3)"
 fi
