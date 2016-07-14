@@ -60,33 +60,33 @@ int main(int argc, char **argv) {
     printf("m=%d, n=%d, np=%d, td=%.5f, h=%.5f\n", m, n, np, td, h);
     double matrix[2][m][n];
 
-    printf("Version parallèle\n");
+    // printf("Version parallèle\n");
     matrix_init(m, n, matrix);
-    printf("init\n====\n");
-    matrix_print(m, n, matrix[0]);
+    // printf("init\n====\n");
+    // matrix_print(m, n, matrix[0]);
     start = get_current_time();
     chaleur_par(m, n, matrix, np, td, h);
     end = get_current_time();
     double dt_par = end - start;
-    printf("final\n=====\n");
-    matrix_print(m, n, matrix[0]);
+    // printf("final\n=====\n");
+    // matrix_print(m, n, matrix[0]);
 
 
-    printf("Version séquentielle\n");
+    // printf("Version séquentielle\n");
     matrix_init(m, n, matrix);
-    printf("init\n====\n");
-    matrix_print(m, n, matrix[0]);
+    // printf("init\n====\n");
+    // matrix_print(m, n, matrix[0]);
     start = get_current_time();
     chaleur_seq(m, n, matrix, np, td, h);
     end = get_current_time();
     double dt_seq = end - start;
-    printf("final\n====\n");
-    matrix_print(m, n, matrix[0]);
-    printf("Temps d'éxecution parrallèle: %f\n", dt_par);
-    printf("Temps d'éxecution séquentiel: %f\n", dt_seq);
-    printf("Accélération : %f\n", dt_seq/dt_par);
-    printf("Efficacité: %f\n", (dt_seq/dt_par)/cpus);
-    printf("%d|%f|%f|\n", np, dt_seq, dt_par);
+    // printf("final\n====\n");
+    // matrix_print(m, n, matrix[0]);
+    // printf("Temps d'éxecution parrallèle: %f\n", dt_par);
+    // printf("Temps d'éxecution séquentiel: %f\n", dt_seq);
+    // printf("Accélération : %f\n", dt_seq/dt_par);
+    // printf("Efficacité: %f\n", (dt_seq/dt_par)/cpus);
+    printf("|%d|%f|%f|\n", m, dt_seq, dt_par);
   } else {
     double matrix[2][m][n];
     matrix_zero(m, n, matrix);
