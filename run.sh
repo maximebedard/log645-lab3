@@ -22,7 +22,7 @@ if [ $1 -gt 5 ] &&
   [ 1 -eq "$(echo "${td} > ${dec}" | bc)" ] &&
   [ 1 -eq "$(echo "${h} > ${dec}" | bc)" ] &&
   [ $6 -gt 3 ]; then
-  mpirun -n $6 --hostfile ./hostfile ./chaleur $1 $2 $3 $4 $5 $6
+  mpirun -n $6 --hostfile ./Hostfile ./chaleur $1 $2 $3 $4 $5 $6
 else
   echo "Un des paramètres est invalide. Veuillez réessayer."
   echo "Aide:"
