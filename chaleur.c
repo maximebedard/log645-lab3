@@ -41,7 +41,7 @@ struct Message {
 };
 
 int main(int argc, char **argv) {
-  int err, rank, m, n, np;
+  int err, rank, m, n, np, cpus;
   double start, end, td, h;
 
   m    = atoi(argv[1]);
@@ -49,6 +49,7 @@ int main(int argc, char **argv) {
   np   = atoi(argv[3]);
   td   = atof(argv[4]);
   h    = atof(argv[5]);
+  cpus = atoi(argv[6]);
 
   err = MPI_Init(&argc, &argv);
 
@@ -69,7 +70,7 @@ int main(int argc, char **argv) {
     double dt_par = end - start;
     printf("final\n=====\n");
     matrix_print(m, n, matrix[0]);
-    printf("Temps d'éxecution : %f\n", dt_par);
+
 
     printf("Version séquentielle\n");
     matrix_init(m, n, matrix);
@@ -81,9 +82,11 @@ int main(int argc, char **argv) {
     double dt_seq = end - start;
     printf("final\n====\n");
     matrix_print(m, n, matrix[0]);
-    printf("Temps d'éxecution : %f\n", dt_seq);
+    printf("Temps d'éxecution parrallèle: %f\n", dt_par);
+    printf("Temps d'éxecution séquentiel: %f\n", dt_seq);
     printf("Accélération : %f\n", dt_seq/dt_par);
-    printf("Efficacité: %f\n", 1);
+    printf("Efficacité: %f\n", (dt_seq/dt_par)/cpus);
+    printf("%d|%f|%f|\n", np, dt_seq, dt_par);
   } else {
     double matrix[2][m][n];
     matrix_zero(m, n, matrix);
